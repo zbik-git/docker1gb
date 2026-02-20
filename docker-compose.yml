@@ -1,76 +1,63 @@
 version: "3.8"
 
 services:
-  immich-server:
-    image: ghcr.io/immich-app/immich-server:release
-    container_name: immich_server
-    command: ["start.sh", "immich"]
-    env_file:
-      - .env
-    volumes:
-      - ${UPLOAD_LOCATION}:/usr/src/app/upload
-    ports:
-      - "2283:2283"
-    depends_on:
-      - redis
-      - postgres
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-
-  immich-microservices:
-    image: ghcr.io/immich-app/immich-server:release
-    container_name: immich_microservices
-    command: ["start.sh", "microservices"]
-    env_file:
-      - .env
-    volumes:
-      - ${UPLOAD_LOCATION}:/usr/src/app/upload
-    depends_on:
-      - redis
-      - postgres
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-
-  redis:
-    image: redis:7-alpine
-    container_name: immich_redis
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 64M
-
-  postgres:
-    image: postgres:15-alpine
+  immich_postgres:
+    image: postgres:15
     container_name: immich_postgres
     environment:
       POSTGRES_USER: immich
       POSTGRES_PASSWORD: immich
       POSTGRES_DB: immich
+    command: >
+      postgres
+      -c shared_preload_libraries=vectorchord.so
+      -c shared_buffers=128MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=32MB
+      -c max_connections=50
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    command:
-      - postgres
-      - -c
-      - shared_buffers=64MB
-      - -c
-      - work_mem=4MB
-      - -c
-      - maintenance_work_mem=64MB
-      - -c
-      - max_connections=50
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256M
+      - ./pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
-volumes:
-  pgdata:
+  immich_redis:
+    image: redis:7
+    container_name: immich_redis
+    command: redis-server --appendonly yes --save 60 1 --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - ./redisdata:/data
+    ports:
+      - "6379:6379"
+
+  immich_api:
+    image: immich/immich-api:2.5.6
+    container_name: immich_api
+    environment:
+      DATABASE_HOST: immich_postgres
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: immich
+      DATABASE_PASSWORD: immich
+      DATABASE_NAME: immich
+      REDIS_HOST: immich_redis
+      REDIS_PORT: 6379
+      APP_PORT: 2283
+    depends_on:
+      - immich_postgres
+      - immich_redis
+    ports:
+      - "2283:2283"
+
+  immich_microservices:
+    image: immich/immich-microservices:2.5.6
+    container_name: immich_microservices
+    environment:
+      DATABASE_HOST: immich_postgres
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: immich
+      DATABASE_PASSWORD: immich
+      DATABASE_NAME: immich
+      REDIS_HOST: immich_redis
+      REDIS_PORT: 6379
+    depends_on:
+      - immich_postgres
+      - immich_redis
