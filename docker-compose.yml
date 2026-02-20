@@ -28,7 +28,9 @@ services:
       - "6379:6379"
 
   immich_api:
-    image: ghcr.io/immich-app/immich-api:2.5.6
+    build:
+      context: ./immich
+      dockerfile: Dockerfile.api
     container_name: immich_api
     environment:
       DATABASE_HOST: immich_postgres
@@ -46,7 +48,9 @@ services:
       - "2283:2283"
 
   immich_microservices:
-    image: ghcr.io/immich-app/immich-microservices:2.5.6
+    build:
+      context: ./immich
+      dockerfile: Dockerfile.microservices
     container_name: immich_microservices
     environment:
       DATABASE_HOST: immich_postgres
